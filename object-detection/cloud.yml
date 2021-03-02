@@ -1,0 +1,11 @@
+trainingInput:
+  runtimeVersion: "2.3"
+  scaleTier: CUSTOM
+  masterType: standard_p100
+  workerCount: 1
+  workerType: standard_gpu
+  parameterServerCount: 1
+  parameterServerType: standard
+
+
+
