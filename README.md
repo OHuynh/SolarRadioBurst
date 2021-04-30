@@ -6,7 +6,7 @@ Solar burst (Type II, III, IV events) detection on time-frequency images capture
 
 ### data
 
-Download data here from : https://realtime.obs-nancay.fr/dam/data_dam_affiche/data_dam_affiche.php and put it in subfolders with name formatted like this YYYYMMDD
+Download data here from : https://realtime.obs-nancay.fr/dam/data_dam_affiche/data_dam_affiche.php and put it in subfolders with name formatted like this YYYYMM
 
 ### data_proc
 
