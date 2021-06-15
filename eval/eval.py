@@ -11,15 +11,15 @@ from criteria import *
 
 show_detections_cnn = True
 show_detections_whole_day = True
-test_type = 2
+test_type = 4
 
 thresholds_for_curve = np.arange(0.5, 1.0, 0.05)
 params_detect = {2: {'window': 2700,
-                     'stride': 1350,
+                     'stride': 1350, #ballayage, image qu'on reformate pour fit le modèle
                      'width_px': 320,
                      'height_px': 160,
-                     'near_distance_merge': 300,
-                     'nms_iou_threshold': 0.1,
+                     'near_distance_merge': 300, #merge depuis les boites trouvées
+                     'nms_iou_threshold': 0.1, #idem
                      'full_height': False},
                  3: {'window': 500,
                      'stride': 250,
@@ -71,7 +71,7 @@ def merge_near_boxes(areas, distance=0):
         areas[idx]['detections'] = boxes
     return areas
 
-def cnn_detect_with_slide(img, area, model, type, params_detect, base_threshold=0.5, show_detection=False, show_whole_area=False):
+def cnn_detect_with_slide(img, area, model, type, params_detect, base_threshold=0.5, show_detection=False, show_whole_area=False): #tous les params qui balayent la journée
     if img.shape[1] < area.r_x:
         area.r_x = img.shape[1]
     boxes = np.empty(shape=(0, 6))
@@ -87,8 +87,8 @@ def cnn_detect_with_slide(img, area, model, type, params_detect, base_threshold=
         img_to_show = np.repeat(np.expand_dims(img_windowed.copy().astype(dtype=np.uint8), axis=2), 3, axis=2)
         img_windowed = np.reshape(img_windowed, (1, params_detect['height_px'], params_detect['width_px'], 1))
         detections = model(img_windowed)
-        if show_detection:
-            for positive in area.get_positives():
+        if show_detection: #ssd prend en entrée une image et en sortie plein de boites. Ces boites sont données dans un tableau, à des ancres
+            for positive in area.get_positives():#image_windowed : 1 batch, 160,320 (taille conventionnée), 1 couleur
                 x_min = int((positive[0] - i) / params_detect['window'] * params_detect['width_px'])
                 x_max = int((positive[1] - i) / params_detect['window'] * params_detect['width_px'])
                 y_min = int((positive[2] - 10.0) / 70.0 * params_detect['height_px'])
@@ -98,14 +98,14 @@ def cnn_detect_with_slide(img, area, model, type, params_detect, base_threshold=
                 #if tl_img[0] != br_img[0]:
                 #    cv2.rectangle(img_to_show, tl_img, br_img, (0, 0, 255), 1)
                 print("{}/{}/{}".format(area.year, area.month, area.day))
-        bboxes = detections['detection_boxes'][0].numpy()
+        bboxes = detections['detection_boxes'][0].numpy() #travailler avec detection_boxes, detection_classes, detection_scores #si c'est supérieur à un certain threshold, c'est détecté
         bclasses = detections['detection_classes'][0].numpy().astype(np.int32)
         bscores = detections['detection_scores'][0].numpy()
         #print(bscores)
         FP = False
         for idx in range(len(bboxes)):
             if bclasses[idx] == 1:
-                if bscores[idx] >= base_threshold:
+                if bscores[idx] >= base_threshold: #on resize ce qui est détecté, et on dessine le rectangle sur l'image to show
                     print(bscores[idx])
                     y_min = int(bboxes[idx][0] * params_detect['height_px'])
                     x_min = int(bboxes[idx][1] * params_detect['width_px'])
@@ -132,7 +132,7 @@ def cnn_detect_with_slide(img, area, model, type, params_detect, base_threshold=
 
         if area.l_x + params_detect['window'] > area.r_x:
             break
-    if show_whole_area:
+    if show_whole_area: #merge sur toute la journée
         boxes_ = boxes.copy()
         boxes_[:, 0] = 11.0
         boxes_[:, 2] = 79.0
@@ -167,23 +167,23 @@ def cnn_detect_with_slide(img, area, model, type, params_detect, base_threshold=
 def append_detections_in_tests_areas_CNN(type, test_areas, params_detect):
     print('Loading model...')
     model = tf.saved_model.load(
-        "../object-detection/exported_{}/saved_model".format(type),
+        "C:/Users/zacch/Desktop/Stage_Orlean/SolarRadioBurst/bucket/output/exported{}/saved_model".format(type),
         tags=None,
         options=None
     )
     print('Model loaded !')
-    for idx in range(len(test_areas)):
+    for idx in range(len(test_areas)): #il va chercher le fichier RT1
         test_area = test_areas[idx]['area']
-        filename = os.path.join('../data',
+        filename = os.path.join('C:/Users/zacch/Desktop/Stage_Orlean/SolarRadioBurst/Solar_Interface/Image_Filters/Read_Data/Data',
                                 str(test_area.year) + '%02d' % test_area.month)
         extension = "S" + str(test_area.year)[2:4] + '%02d' % test_area.month + '%02d' % test_area.day + ".RT1"
         filename = os.path.join(filename, extension)
         if not os.path.exists(filename):
             continue
-        img, _, _, _ = read_data(filename)
+        img, _, _, _, _ = read_data(filename)
         filtered_img = remove_artifactsC(img)
 
-        test_areas[idx]['detections'] = np.concatenate([test_areas[idx]['detections'],
+        test_areas[idx]['detections'] = np.concatenate([test_areas[idx]['detections'], #on stocke les résulstats de la détection
                                                        cnn_detect_with_slide(filtered_img,
                                                                              test_area,
                                                                              model,
@@ -220,7 +220,7 @@ def append_detections_in_tests_areas_from_file(type, test_areas):
 def collect_results(type, areas, params_detect):
     #keep only areas in test_data
     test_areas = get_subset_areas_dict(areas[type],
-                                       "../data_proc/TFRecord/Type{}/1/dataset_type_{}_train_areas.txt".format(type, type))
+                                       "../data_proc/dataset_type_{}_test_areas.txt".format(type, type))
     CNN_MODE = True
     if CNN_MODE:
         test_areas = append_detections_in_tests_areas_CNN(type, test_areas, params_detect)
@@ -248,7 +248,7 @@ def collect_results(type, areas, params_detect):
                 filename = os.path.join(filename, extension)
                 if not os.path.exists(filename):
                     continue
-                img, _, _, _ = read_data(filename)
+                img, _, _, _, _ = read_data(filename)
                 filtered_img = remove_artifactsC(img)
                 plot_bursts(filtered_img, test_area_merged['area'].get_positives(), '{:02d}/{:02d}/{}'.format(test_area_merged['area'].day, test_area_merged['area'].month, test_area_merged['area'].year))
 
@@ -290,7 +290,7 @@ def eval_in_test_areas():
     sdate = date(2011, 1, 1)
     edate = date(2020, 12, 31)
     delta = edate - sdate
-    all_data = read_annotations(path='../data/Annotation.txt')
+    all_data = read_annotations(path='C:/Users/zacch/Desktop/Stage_Orlean/SolarRadioBurst/Solar_Interface/Image_Filters/Read_Data/Data/Annotation.txt')
     all_data[all_data[:, 4] == 6, 4] = 4
 
     areas_type_2, areas_type_3, areas_type_4, _, _, _ = get_data_in_areas(all_data, sdate, edate)

@@ -2,7 +2,7 @@ import numpy as np
 
 
 def remove_artifactsC(spec, T = 3600):
-    # spec is structured variable among ohters:
+    # spec is structured variable among others:
     # spec.data : power data, linear
     guard = 2  # guard
     cal_d = 40

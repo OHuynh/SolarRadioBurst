@@ -43,7 +43,7 @@ params = {2: {'window': 2700,
               'height_px': 160,
               'full_height': False},
           4: {'window': 28800,
-              'large_window': 28801,
+              'large_window': 28801, #~8 hours
               'width_px': 512,
               'height_px': 256,
               'full_height': False}}
@@ -75,7 +75,7 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
                 filename = os.path.join(filename, extension)
                 if not os.path.exists(filename):
                     continue
-                img,_,_,_ = read_data(filename)
+                img, _, _, _, _ = read_data(filename)
 
                 #sometimes, daily measures are clipped
                 if label != 3 and img.shape[1] != area.r_x:
@@ -99,7 +99,7 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
                 assert r_x - l_x > 0, 'Window for type {} too small'.format(label)
                 pos_x = int((r_x - l_x) * np.random.rand() + l_x)
 
-                #create new area with this window
+                #create new area with this window, smaller with an offset
                 new_area = Area(area.year, area.month, area.day, area.type,
                                 l_x=pos_x, r_x=pos_x+params['window'], b_y=area.b_y, t_y=area.t_y)
                 new_area.add_valid_annot(area.get_positives(), with_height=False, allow_partial=True)
@@ -239,7 +239,7 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
             if os.path.exists(filename):
                 neg_areas += 1
 
-    # negatives
+    # negatives = images sans événements
     neg_stored = 0
     store_in_test = False
     total_neg = ratio_of_neg * total_pos
@@ -262,7 +262,7 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
                 if not os.path.exists(filename):
                     continue
 
-                img, _, _, _ = read_data(filename)
+                img, _, _, _, _ = read_data(filename)
                 if img.shape[1] == 0:
                     print('Warning ! skip {}, empty file'.format(filename))
                     continue
@@ -354,7 +354,7 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
 
 def main():
 
-    all_data = read_annotations(path='../data/Annotation.txt')
+    all_data = read_annotations(path='../Solar_Interface/Image_Filters/Read_Data/Data/Annotation.txt')
     years_available = [2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020]
     sdate = date(2011, 1, 1)
     edate = date(2020, 12, 31)
@@ -383,9 +383,9 @@ def main():
     random.shuffle(areas_type_2)
     random.shuffle(areas_type_3)
     random.shuffle(areas_type_4)
-    #generate_tfrecord(areas_type_2, 2, params[2], 'dataset_type_2', 0.75, 18.0, 5.0, total_pos_2, variant_pos=3, show=False)
-    #generate_tfrecord(areas_type_3, 3, params[3], 'dataset_type_3', 0.75, 0.1, 3.0, total_pos_3, variant_pos=2, show=False)
-    generate_tfrecord(areas_type_4, 4, params[4], 'dataset_type_4', 0.75, 12.0, 0.0, total_pos_4, variant_pos=1, show=False)
+    generate_tfrecord(areas_type_2, 2, params[2], 'dataset_type_2', 0.75, 18.0, 5.0, total_pos_2, variant_pos=3, show=False)
+    generate_tfrecord(areas_type_3, 3, params[3], 'dataset_type_3', 0.75, 0.1, 3.0, total_pos_3, variant_pos=2, show=False)
+    generate_tfrecord(areas_type_4, 4, params[4], 'dataset_type_4', 0.75, 1.0, 0.0, total_pos_4, variant_pos=1, show=False)
 
 if __name__ == '__main__':
     main()
