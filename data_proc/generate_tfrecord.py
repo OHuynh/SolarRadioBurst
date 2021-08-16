@@ -166,9 +166,12 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test,
                         img_windowed_bis = (img_windowed_bis/ np.max(img_windowed_bis) * 255.0).astype(dtype=np.uint8)
                         cv2.imwrite('tmp.png', img_windowed_bis)
                         if show:
-                            plot_bursts(img_windowed_bis,  # mettre img_windowed
-                                    new_area.get_positives(),
-                                    '{:02d}/{:02d}/{}'.format(area.day, area.month, area.year))
+                            for idx_pos in range(len(xmins)):
+                                pt1 = (int(xmins[idx_pos] * params['width_px']), int(ymins[idx_pos] * params['height_px']))
+                                pt2 = (int(xmaxs[idx_pos] * params['width_px']), int(ymaxs[idx_pos] * params['height_px']))
+                                img_windowed_bis = cv2.rectangle(img_windowed_bis, pt1, pt2, (255, 0, 0), 2)
+                            cv2.imshow('Type IV padded', img_windowed_bis)
+                            cv2.waitKey(-1)
                         with tf.io.gfile.GFile('tmp.png', 'rb') as fid:
                             img_windowed_bis = fid.read()
                         tf_example = tf.train.Example(features=tf.train.Features(feature={
@@ -500,7 +503,7 @@ def main():
     random.shuffle(areas_type_4)
     #generate_tfrecord(areas_type_2, 2, params[2], 'dataset_type_2', 0.75, 18.0, 5.0, total_pos_2, variant_pos=3, show=False)
     #generate_tfrecord(areas_type_3, 3, params[3], 'dataset_type_3', 0.75, 0.1, 3.0, total_pos_3, variant_pos=2, show=False)
-    generate_tfrecord(areas_type_4, 4, params[4], 'dataset_type_4', 0.75, 12.0, 0.0, total_pos_4, variant_pos=1, show=False, augment_with_slide=True)
+    generate_tfrecord(areas_type_4, 4, params[4], 'dataset_type_4', 0.75, 12.0, 0.0, total_pos_4, variant_pos=1, show=True, augment_with_slide=True)
 
 if __name__ == '__main__':
     main()
