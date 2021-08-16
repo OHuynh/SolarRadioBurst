@@ -47,8 +47,17 @@ params = {2: {'window': 2700,
               'width_px': 512,
               'height_px': 256,
               'full_height': False}}
+#path_data = '../Solar_Interface/Image_Filters/Read_Data/Data'
+path_data = '../Data'
 
-def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio_of_neg, ratio_of_neg_in_pos_areas, total_pos, variant_pos=1, show=True):
+
+def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test,
+                      ratio_of_neg,
+                      ratio_of_neg_in_pos_areas,
+                      total_pos,
+                      variant_pos=1,
+                      show=True,
+                      augment_with_slide=False):
     writer_train = tf.compat.v1.python_io.TFRecordWriter('{}_train.tfrecord'.format(prefix_file))
     writer_test = tf.compat.v1.python_io.TFRecordWriter('{}_test.tfrecord'.format(prefix_file))
     sample_stored = 0
@@ -65,12 +74,20 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
     neg_per_pos_area = np.max([1, int(ratio_of_neg_in_pos_areas)])
     neg_areas = 0
 
+    idx_test = 0
+    a_peter = False
     #positives
     for area in areas:
+        if a_peter:
+            break
         added_samples = 0
         for idx in range(len(area.get_positives())):
+            if idx_test == 5:
+                a_peter = True
+                break
+            idx_test += 1
             for _ in range(variant_pos):
-                filename = os.path.join('../Solar_Interface/Image_Filters/Read_Data/Data', str(area.year) + '%02d' % area.month)
+                filename = os.path.join(path_data, str(area.year) + '%02d' % area.month)
                 extension = "S" + str(area.year)[2:4] + '%02d' % area.month + '%02d' % area.day + ".RT1"
                 filename = os.path.join(filename, extension)
                 if not os.path.exists(filename):
@@ -220,7 +237,7 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
             # negatives in positive area
             for _ in range(neg_per_pos_area):
                 if neg_in_pos_areas > len(trains_neg):
-                    filename = os.path.join('../Solar_Interface/Image_Filters/Read_Data/Data', str(area.year) + '%02d' % area.month)
+                    filename = os.path.join(path_data, str(area.year) + '%02d' % area.month)
                     extension = "S" + str(area.year)[2:4] + '%02d' % area.month + '%02d' % area.day + ".RT1"
                     filename = os.path.join(filename, extension)
                     if not os.path.exists(filename):
@@ -289,7 +306,7 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
         if total_pos * ratio_train_test < sample_stored:
             store_in_test = True
         if len(area.get_positives()) == 0:
-            filename = os.path.join('../Solar_Interface/Image_Filters/Read_Data/Data',
+            filename = os.path.join(path_data,
                                     str(area.year) + '%02d' % area.month)
             extension = "S" + str(area.year)[2:4] + '%02d' % area.month + '%02d' % area.day + ".RT1"
             filename = os.path.join(filename, extension)
@@ -312,7 +329,7 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
                 ymaxs = []
                 labels = []
                 labels_txt = []
-                filename = os.path.join('../Solar_Interface/Image_Filters/Read_Data/Data',
+                filename = os.path.join(path_data,
                                         str(area.year) + '%02d' % area.month)
                 extension = "S" + str(area.year)[2:4] + '%02d' % area.month + '%02d' % area.day + ".RT1"
                 filename = os.path.join(filename, extension)
@@ -344,7 +361,7 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
                                 [],
                                 '{:02d}/{:02d}/{}'.format(area.day, area.month, area.year))
                 #crop ce qui a à droite de la ligne verticale et mettre des 0 à la place dans le cas d'un type 4 loop + 10 mins
-                if label == 4:
+                if label == 4 and augment_with_slide:
                     current_pos = 1800
                     while current_pos < area.r_x:
                         xmin_bis = []
@@ -460,7 +477,7 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
 
 def main():
 
-    all_data = read_annotations(path='../Solar_Interface/Image_Filters/Read_Data/Data/Annotation.txt')
+    all_data = read_annotations(path=f'{path_data}/Annotation.txt')
     years_available = [2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020]
     sdate = date(2011, 1, 1)
     edate = date(2020, 12, 31)
@@ -489,9 +506,9 @@ def main():
     random.shuffle(areas_type_2)
     random.shuffle(areas_type_3)
     random.shuffle(areas_type_4)
-    generate_tfrecord(areas_type_2, 2, params[2], 'dataset_type_2', 0.75, 18.0, 5.0, total_pos_2, variant_pos=3, show=False)
+    generate_tfrecord(areas_type_2, 2, params[2], 'dataset_type_2', 0.75, 1.0, 5.0, total_pos_2, variant_pos=3, show=False)
     #generate_tfrecord(areas_type_3, 3, params[3], 'dataset_type_3', 0.75, 0.1, 3.0, total_pos_3, variant_pos=2, show=False)
-    #generate_tfrecord(areas_type_4, 4, params[4], 'dataset_type_4', 0.75, 12.0, 0.0, total_pos_4, variant_pos=1, show=False)
+    #generate_tfrecord(areas_type_4, 4, params[4], 'dataset_type_4', 0.75, 12.0, 0.0, total_pos_4, variant_pos=1, show=False, augment_with_slide=True)
 
 if __name__ == '__main__':
     main()
