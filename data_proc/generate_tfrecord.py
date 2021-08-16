@@ -138,7 +138,7 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test,
                     labels.append(1)
                     labels_txt.append('Type'.encode('utf8'))
 
-                if label == 4:
+                if label == 4 and augment_with_slide:
                     current_pos = 1800
                     while current_pos < area.r_x:
                         xmin_bis = []
@@ -498,9 +498,9 @@ def main():
     random.shuffle(areas_type_2)
     random.shuffle(areas_type_3)
     random.shuffle(areas_type_4)
-    generate_tfrecord(areas_type_2, 2, params[2], 'dataset_type_2', 0.75, 18.0, 5.0, total_pos_2, variant_pos=3, show=False)
+    #generate_tfrecord(areas_type_2, 2, params[2], 'dataset_type_2', 0.75, 18.0, 5.0, total_pos_2, variant_pos=3, show=False)
     #generate_tfrecord(areas_type_3, 3, params[3], 'dataset_type_3', 0.75, 0.1, 3.0, total_pos_3, variant_pos=2, show=False)
-    #generate_tfrecord(areas_type_4, 4, params[4], 'dataset_type_4', 0.75, 12.0, 0.0, total_pos_4, variant_pos=1, show=False, augment_with_slide=True)
+    generate_tfrecord(areas_type_4, 4, params[4], 'dataset_type_4', 0.75, 12.0, 0.0, total_pos_4, variant_pos=1, show=False, augment_with_slide=True)
 
 if __name__ == '__main__':
     main()
