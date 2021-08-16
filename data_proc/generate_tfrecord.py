@@ -47,8 +47,8 @@ params = {2: {'window': 2700,
               'width_px': 512,
               'height_px': 256,
               'full_height': False}}
-#path_data = '../Solar_Interface/Image_Filters/Read_Data/Data'
-path_data = '../Data'
+path_data = '../Solar_Interface/Image_Filters/Read_Data/Data'
+#path_data = '../Data'
 
 
 def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test,
@@ -149,7 +149,6 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test,
                         labels_txt_bis = []
                         img_windowed_bis = img_windowed.copy()
                         img_windowed_bis[:,current_pos:] = 0
-                        current_pos += 1800
                         current_pos_norm = current_pos/28800.0
                         i = 0
                         while i < len(xmins):
@@ -166,9 +165,9 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test,
                         img_windowed_bis = (img_windowed_bis/ np.max(img_windowed_bis) * 255.0).astype(dtype=np.uint8)
                         cv2.imwrite('tmp.png', img_windowed_bis)
                         if show:
-                            for idx_pos in range(len(xmins)):
-                                pt1 = (int(xmins[idx_pos] * params['width_px']), int(ymins[idx_pos] * params['height_px']))
-                                pt2 = (int(xmaxs[idx_pos] * params['width_px']), int(ymaxs[idx_pos] * params['height_px']))
+                            for idx_pos in range(len(xmin_bis)):
+                                pt1 = (int(xmin_bis[idx_pos] * params['width_px']), int(ymin_bis[idx_pos] * params['height_px']))
+                                pt2 = (int(xmax_bis[idx_pos] * params['width_px']), int(ymax_bis[idx_pos] * params['height_px']))
                                 img_windowed_bis = cv2.rectangle(img_windowed_bis, pt1, pt2, (255, 0, 0), 2)
                             cv2.imshow('Type IV padded', img_windowed_bis)
                             cv2.waitKey(-1)
@@ -181,11 +180,12 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test,
                             'image/format': bytes_feature('png'.encode('utf8')),
                             'image/object/bbox/xmin': float_list_feature(xmin_bis),
                             'image/object/bbox/xmax': float_list_feature(xmax_bis),
-                            'image/object/bbox/ymin': float_list_feature(ymins),
-                            'image/object/bbox/ymax': float_list_feature(ymaxs),
+                            'image/object/bbox/ymin': float_list_feature(ymin_bis),
+                            'image/object/bbox/ymax': float_list_feature(ymax_bis),
                             'image/object/class/label': int64_list_feature(label_bis),
                             'image/object/class/text': bytes_list_feature(labels_txt_bis),
                         }))
+                        current_pos += 1800
                         if store_in_test:
                             tests_pos.append(tf_example.SerializeToString())
                         else:
@@ -367,7 +367,6 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test,
                         labels_txt_bis = []
                         img_windowed_bis = img_windowed.copy()
                         img_windowed_bis[:, current_pos:] = 0
-                        current_pos += 1800
                         current_pos_norm = current_pos / 28800.0
                         i = 0
                         while i < len(xmins):
@@ -396,11 +395,12 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test,
                             'image/format': bytes_feature('png'.encode('utf8')),
                             'image/object/bbox/xmin': float_list_feature(xmin_bis),
                             'image/object/bbox/xmax': float_list_feature(xmax_bis),
-                            'image/object/bbox/ymin': float_list_feature(ymins),
-                            'image/object/bbox/ymax': float_list_feature(ymaxs),
+                            'image/object/bbox/ymin': float_list_feature(ymin_bis),
+                            'image/object/bbox/ymax': float_list_feature(ymax_bis),
                             'image/object/class/label': int64_list_feature(label_bis),
                             'image/object/class/text': bytes_list_feature(labels_txt_bis),
                         }))
+                        current_pos += 1800
                         if store_in_test:
                             tests_pos.append(tf_example.SerializeToString())
                         else:
@@ -503,7 +503,7 @@ def main():
     random.shuffle(areas_type_4)
     #generate_tfrecord(areas_type_2, 2, params[2], 'dataset_type_2', 0.75, 18.0, 5.0, total_pos_2, variant_pos=3, show=False)
     #generate_tfrecord(areas_type_3, 3, params[3], 'dataset_type_3', 0.75, 0.1, 3.0, total_pos_3, variant_pos=2, show=False)
-    generate_tfrecord(areas_type_4, 4, params[4], 'dataset_type_4', 0.75, 12.0, 0.0, total_pos_4, variant_pos=1, show=True, augment_with_slide=True)
+    generate_tfrecord(areas_type_4, 4, params[4], 'dataset_type_4', 0.75, 12.0, 0.0, total_pos_4, variant_pos=1, show=False, augment_with_slide=True)
 
 if __name__ == '__main__':
     main()
