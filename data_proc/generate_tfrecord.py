@@ -43,12 +43,12 @@ params = {2: {'window': 2700,
               'height_px': 160,
               'full_height': False},
           4: {'window': 28800,
-              'large_window': 28801,
+              'large_window': 28801, #~8 hours
               'width_px': 512,
               'height_px': 256,
               'full_height': False}}
 
-def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio_of_neg, ratio_of_neg_in_pos_areas, total_pos, variant_pos=1, show=False):
+def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio_of_neg, ratio_of_neg_in_pos_areas, total_pos, variant_pos=1, show=True):
     writer_train = tf.compat.v1.python_io.TFRecordWriter('{}_train.tfrecord'.format(prefix_file))
     writer_test = tf.compat.v1.python_io.TFRecordWriter('{}_test.tfrecord'.format(prefix_file))
     sample_stored = 0
@@ -70,12 +70,12 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
         added_samples = 0
         for idx in range(len(area.get_positives())):
             for _ in range(variant_pos):
-                filename = os.path.join('../data', str(area.year) + '%02d' % area.month)
+                filename = os.path.join('../Solar_Interface/Image_Filters/Read_Data/Data', str(area.year) + '%02d' % area.month)
                 extension = "S" + str(area.year)[2:4] + '%02d' % area.month + '%02d' % area.day + ".RT1"
                 filename = os.path.join(filename, extension)
                 if not os.path.exists(filename):
                     continue
-                img,_,_,_ = read_data(filename)
+                img, _, _, _, _, _ = read_data(filename)
 
                 #sometimes, daily measures are clipped
                 if label != 3 and img.shape[1] != area.r_x:
@@ -99,7 +99,7 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
                 assert r_x - l_x > 0, 'Window for type {} too small'.format(label)
                 pos_x = int((r_x - l_x) * np.random.rand() + l_x)
 
-                #create new area with this window
+                #create new area with this window, smaller with an offset
                 new_area = Area(area.year, area.month, area.day, area.type,
                                 l_x=pos_x, r_x=pos_x+params['window'], b_y=area.b_y, t_y=area.t_y)
                 new_area.add_valid_annot(area.get_positives(), with_height=False, allow_partial=True)
@@ -129,33 +129,83 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
                     labels.append(1)
                     labels_txt.append('Type'.encode('utf8'))
 
-                img_windowed = cv2.resize(img_windowed, dsize=(params['width_px'], params['height_px']))
-                cv2.imwrite('img/{}.png'.format(sample_stored), img_windowed)
-                img_windowed = (img_windowed / np.max(img_windowed) * 255.0).astype(dtype=np.uint8)
-                cv2.imwrite('tmp.png', img_windowed)
+                if label == 4:
+                    current_pos = 1800
+                    while current_pos < area.r_x:
+                        xmin_bis = []
+                        xmax_bis = []
+                        ymin_bis = []
+                        ymax_bis = []
+                        label_bis = []
+                        labels_txt_bis = []
+                        img_windowed_bis = img_windowed.copy()
+                        img_windowed_bis[:,current_pos:] = 0
+                        current_pos += 1800
+                        current_pos_norm = current_pos/28800.0
+                        i = 0
+                        while i < len(xmins):
+                            if xmins[i] <= current_pos_norm:
+                                xmin_bis.append(xmins[i])
+                                xmax_bis.append(np.min([current_pos_norm, xmaxs[i]]))
+                                ymin_bis.append(ymins[i])
+                                ymax_bis.append(ymaxs[i])
+                                label_bis.append(labels[i])
+                                labels_txt_bis.append(labels_txt[i])
+                            i += 1
+                        img_windowed_bis = cv2.resize(img_windowed_bis, dsize=(params['width_px'], params['height_px']))
+                        cv2.imwrite('img/{}.png'.format(sample_stored), img_windowed_bis)
+                        img_windowed_bis = (img_windowed_bis/ np.max(img_windowed_bis) * 255.0).astype(dtype=np.uint8)
+                        cv2.imwrite('tmp.png', img_windowed_bis)
+                        if show:
+                            plot_bursts(img_windowed_bis,  # mettre img_windowed
+                                    new_area.get_positives(),
+                                    '{:02d}/{:02d}/{}'.format(area.day, area.month, area.year))
+                        with tf.io.gfile.GFile('tmp.png', 'rb') as fid:
+                            img_windowed_bis = fid.read()
+                        tf_example = tf.train.Example(features=tf.train.Features(feature={
+                            'image/height': int64_feature(params['height_px']),
+                            'image/width': int64_feature(params['width_px']),
+                            'image/encoded': bytes_feature(img_windowed_bis),
+                            'image/format': bytes_feature('png'.encode('utf8')),
+                            'image/object/bbox/xmin': float_list_feature(xmin_bis),
+                            'image/object/bbox/xmax': float_list_feature(xmax_bis),
+                            'image/object/bbox/ymin': float_list_feature(ymins),
+                            'image/object/bbox/ymax': float_list_feature(ymaxs),
+                            'image/object/class/label': int64_list_feature(label_bis),
+                            'image/object/class/text': bytes_list_feature(labels_txt_bis),
+                        }))
+                        if store_in_test:
+                            tests_pos.append(tf_example.SerializeToString())
+                        else:
+                            trains_pos.append(tf_example.SerializeToString())
 
-                if show:
-                    plot_bursts(img_windowed_cpy,
+                else:
+                    img_windowed = cv2.resize(img_windowed, dsize=(params['width_px'], params['height_px']))  # image_windowed = image complète
+                    cv2.imwrite('img/{}.png'.format(sample_stored), img_windowed)
+                    img_windowed = (img_windowed / np.max(img_windowed) * 255.0).astype(dtype=np.uint8)
+                    cv2.imwrite('tmp.png', img_windowed)
+                    if show:
+                        plot_bursts(img_windowed_cpy, #mettre img_windowed
                                 new_area.get_positives(),
                                 '{:02d}/{:02d}/{}'.format(area.day, area.month, area.year))
-                with tf.io.gfile.GFile('tmp.png', 'rb') as fid:
-                    img_windowed = fid.read()
+                    with tf.io.gfile.GFile('tmp.png', 'rb') as fid:
+                        img_windowed = fid.read()
                 #encoded_jpg_io = io.BytesIO(img_windowed)
                 #image = Image.open(encoded_jpg_io)
                 #width, height = image.size
 
-                tf_example = tf.train.Example(features=tf.train.Features(feature={
-                    'image/height': int64_feature(params['height_px']),
-                    'image/width': int64_feature(params['width_px']),
-                    'image/encoded': bytes_feature(img_windowed),
-                    'image/format': bytes_feature('png'.encode('utf8')),
-                    'image/object/bbox/xmin': float_list_feature(xmins),
-                    'image/object/bbox/xmax': float_list_feature(xmaxs),
-                    'image/object/bbox/ymin': float_list_feature(ymins),
-                    'image/object/bbox/ymax': float_list_feature(ymaxs),
-                    'image/object/class/label': int64_list_feature(labels),
-                    'image/object/class/text': bytes_list_feature(labels_txt),
-                }))
+                    tf_example = tf.train.Example(features=tf.train.Features(feature={
+                        'image/height': int64_feature(params['height_px']),
+                        'image/width': int64_feature(params['width_px']),
+                        'image/encoded': bytes_feature(img_windowed),
+                        'image/format': bytes_feature('png'.encode('utf8')),
+                        'image/object/bbox/xmin': float_list_feature(xmins),
+                        'image/object/bbox/xmax': float_list_feature(xmaxs), #à changer pour les types IV
+                        'image/object/bbox/ymin': float_list_feature(ymins),
+                        'image/object/bbox/ymax': float_list_feature(ymaxs),
+                        'image/object/class/label': int64_list_feature(labels),
+                        'image/object/class/text': bytes_list_feature(labels_txt),
+                    }))
 
                 if store_in_test:
                     tests_pos.append(tf_example.SerializeToString())
@@ -170,6 +220,13 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
             # negatives in positive area
             for _ in range(neg_per_pos_area):
                 if neg_in_pos_areas > len(trains_neg):
+                    filename = os.path.join('../Solar_Interface/Image_Filters/Read_Data/Data', str(area.year) + '%02d' % area.month)
+                    extension = "S" + str(area.year)[2:4] + '%02d' % area.month + '%02d' % area.day + ".RT1"
+                    filename = os.path.join(filename, extension)
+                    if not os.path.exists(filename):
+                        continue
+                    img, _, _, _, _, _ = read_data(filename)
+                    filtered_img = remove_artifactsC(img)
                     for _ in range(1000):
                         to_pad = np.max([params['window'] - (area.r_x - area.l_x), 0])
                         pos_x = np.random.rand() * np.max([(area.r_x - area.l_x - params['window']), 0]) + area.l_x
@@ -232,14 +289,14 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
         if total_pos * ratio_train_test < sample_stored:
             store_in_test = True
         if len(area.get_positives()) == 0:
-            filename = os.path.join('../data',
+            filename = os.path.join('../Solar_Interface/Image_Filters/Read_Data/Data',
                                     str(area.year) + '%02d' % area.month)
             extension = "S" + str(area.year)[2:4] + '%02d' % area.month + '%02d' % area.day + ".RT1"
             filename = os.path.join(filename, extension)
             if os.path.exists(filename):
                 neg_areas += 1
 
-    # negatives
+    # negatives = images sans événements
     neg_stored = 0
     store_in_test = False
     total_neg = ratio_of_neg * total_pos
@@ -255,14 +312,14 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
                 ymaxs = []
                 labels = []
                 labels_txt = []
-                filename = os.path.join('../data',
+                filename = os.path.join('../Solar_Interface/Image_Filters/Read_Data/Data',
                                         str(area.year) + '%02d' % area.month)
                 extension = "S" + str(area.year)[2:4] + '%02d' % area.month + '%02d' % area.day + ".RT1"
                 filename = os.path.join(filename, extension)
                 if not os.path.exists(filename):
                     continue
 
-                img, _, _, _ = read_data(filename)
+                img, _, _, _, _, _ = read_data(filename)
                 if img.shape[1] == 0:
                     print('Warning ! skip {}, empty file'.format(filename))
                     continue
@@ -270,7 +327,7 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
                     area.r_x = img.shape[1] - 1
 
                 filtered_img = remove_artifactsC(img)
-                img_windowed = np.zeros(shape=(img.shape[0], params['window']))
+                img_windowed_bis = img_windowed
 
                 to_pad = np.max([params['window'] - (area.r_x - area.l_x), 0])
                 pos_x = np.random.rand() * np.max([(area.r_x - area.l_x - params['window']), 0]) + area.l_x
@@ -280,31 +337,80 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
                 if to_pad == 0:
                     img_windowed = filtered_img[:, int(np.max([pos_x, area.l_x])):int(np.min([pos_x + params['window'], area.r_x]))]
                 else:
-                    img_windowed[:, int(to_pad / 2):-int(to_pad / 2) - odd] = \
-                        filtered_img[:, int(np.max([pos_x, area.l_x])):int(np.min([pos_x + params['window'], area.r_x]))]
+                    img_windowed[:, int(to_pad / 2):-int(to_pad / 2) - odd] = filtered_img[:, int(np.max([pos_x, area.l_x])):int(np.min([pos_x + params['window'], area.r_x]))]
 
                 if show:
                     plot_bursts(img_windowed,
                                 [],
                                 '{:02d}/{:02d}/{}'.format(area.day, area.month, area.year))
-                img_windowed = cv2.resize(img_windowed, dsize=(params['width_px'], params['height_px']))
-
-                img_windowed = (img_windowed / np.max(img_windowed) * 255.0).astype(dtype=np.uint8)
-                cv2.imwrite('tmp.png', img_windowed)
-                with tf.io.gfile.GFile('tmp.png', 'rb') as fid:
-                    img_windowed = fid.read()
-                tf_example = tf.train.Example(features=tf.train.Features(feature={
-                    'image/height': int64_feature(params['height_px']),
-                    'image/width': int64_feature(params['width_px']),
-                    'image/encoded': bytes_feature(img_windowed),
-                    'image/format': bytes_feature('png'.encode('utf8')),
-                    'image/object/bbox/xmin': float_list_feature(xmins),
-                    'image/object/bbox/xmax': float_list_feature(xmaxs),
-                    'image/object/bbox/ymin': float_list_feature(ymins),
-                    'image/object/bbox/ymax': float_list_feature(ymaxs),
-                    'image/object/class/label': int64_list_feature(labels),
-                    'image/object/class/text': bytes_list_feature(labels_txt),
-                }))
+                #crop ce qui a à droite de la ligne verticale et mettre des 0 à la place dans le cas d'un type 4 loop + 10 mins
+                if label == 4:
+                    current_pos = 1800
+                    while current_pos < area.r_x:
+                        xmin_bis = []
+                        xmax_bis = []
+                        ymin_bis = []
+                        ymax_bis = []
+                        label_bis = []
+                        labels_txt_bis = []
+                        img_windowed_bis = img_windowed.copy()
+                        img_windowed_bis[:, current_pos:] = 0
+                        current_pos += 1800
+                        current_pos_norm = current_pos / 28800.0
+                        i = 0
+                        while i < len(xmins):
+                            if xmins[i] <= current_pos_norm:
+                                xmin_bis.append(xmins[i])
+                                xmax_bis.append(np.min([current_pos_norm, xmaxs[i]]))
+                                ymin_bis.append(ymins[i])
+                                ymax_bis.append(ymaxs[i])
+                                label_bis.append(labels[i])
+                                labels_txt_bis.append(labels_txt[i])
+                            i += 1
+                        img_windowed_bis = cv2.resize(img_windowed_bis, dsize=(params['width_px'], params['height_px']))
+                        cv2.imwrite('img/{}.png'.format(sample_stored), img_windowed_bis)
+                        img_windowed_bis = (img_windowed_bis / np.max(img_windowed_bis) * 255.0).astype(dtype=np.uint8)
+                        cv2.imwrite('tmp.png', img_windowed_bis)
+                        if show:
+                            plot_bursts(img_windowed_bis,  # mettre img_windowed
+                                        new_area.get_positives(),
+                                        '{:02d}/{:02d}/{}'.format(area.day, area.month, area.year))
+                        with tf.io.gfile.GFile('tmp.png', 'rb') as fid:
+                            img_windowed_bis = fid.read()
+                        tf_example = tf.train.Example(features=tf.train.Features(feature={
+                            'image/height': int64_feature(params['height_px']),
+                            'image/width': int64_feature(params['width_px']),
+                            'image/encoded': bytes_feature(img_windowed_bis),
+                            'image/format': bytes_feature('png'.encode('utf8')),
+                            'image/object/bbox/xmin': float_list_feature(xmin_bis),
+                            'image/object/bbox/xmax': float_list_feature(xmax_bis),
+                            'image/object/bbox/ymin': float_list_feature(ymins),
+                            'image/object/bbox/ymax': float_list_feature(ymaxs),
+                            'image/object/class/label': int64_list_feature(label_bis),
+                            'image/object/class/text': bytes_list_feature(labels_txt_bis),
+                        }))
+                        if store_in_test:
+                            tests_pos.append(tf_example.SerializeToString())
+                        else:
+                            trains_pos.append(tf_example.SerializeToString())
+                else:
+                    img_windowed = cv2.resize(img_windowed, dsize=(params['width_px'], params['height_px']))
+                    img_windowed = (img_windowed / np.max(img_windowed) * 255.0).astype(dtype=np.uint8)
+                    cv2.imwrite('tmp.png', img_windowed)
+                    with tf.io.gfile.GFile('tmp.png', 'rb') as fid:
+                        img_windowed = fid.read()
+                    tf_example = tf.train.Example(features=tf.train.Features(feature={
+                        'image/height': int64_feature(params['height_px']),
+                        'image/width': int64_feature(params['width_px']),
+                        'image/encoded': bytes_feature(img_windowed),
+                        'image/format': bytes_feature('png'.encode('utf8')),
+                        'image/object/bbox/xmin': float_list_feature(xmins),
+                        'image/object/bbox/xmax': float_list_feature(xmaxs),
+                        'image/object/bbox/ymin': float_list_feature(ymins),
+                        'image/object/bbox/ymax': float_list_feature(ymaxs),
+                        'image/object/class/label': int64_list_feature(labels),
+                        'image/object/class/text': bytes_list_feature(labels_txt),
+                    }))
                 if store_in_test:
                     tests_neg.append(tf_example.SerializeToString())
                     tests_areas.append(area)
@@ -314,8 +420,8 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
 
                 neg_stored += 1
                 print('{} neg stored for type {}'.format(neg_stored, label))
-        if total_neg * ratio_train_test < neg_stored:
-            store_in_test = True
+            if total_neg * ratio_train_test < neg_stored:
+                store_in_test = True
 
     print('Writing...')
     #balancing pos and neg if neg > pos in training
@@ -354,7 +460,7 @@ def generate_tfrecord(areas, label, params, prefix_file, ratio_train_test, ratio
 
 def main():
 
-    all_data = read_annotations(path='../data/Annotation.txt')
+    all_data = read_annotations(path='../Solar_Interface/Image_Filters/Read_Data/Data/Annotation.txt')
     years_available = [2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020]
     sdate = date(2011, 1, 1)
     edate = date(2020, 12, 31)
@@ -383,9 +489,9 @@ def main():
     random.shuffle(areas_type_2)
     random.shuffle(areas_type_3)
     random.shuffle(areas_type_4)
-    #generate_tfrecord(areas_type_2, 2, params[2], 'dataset_type_2', 0.75, 18.0, 5.0, total_pos_2, variant_pos=3, show=False)
+    generate_tfrecord(areas_type_2, 2, params[2], 'dataset_type_2', 0.75, 18.0, 5.0, total_pos_2, variant_pos=3, show=False)
     #generate_tfrecord(areas_type_3, 3, params[3], 'dataset_type_3', 0.75, 0.1, 3.0, total_pos_3, variant_pos=2, show=False)
-    generate_tfrecord(areas_type_4, 4, params[4], 'dataset_type_4', 0.75, 12.0, 0.0, total_pos_4, variant_pos=1, show=False)
+    #generate_tfrecord(areas_type_4, 4, params[4], 'dataset_type_4', 0.75, 12.0, 0.0, total_pos_4, variant_pos=1, show=False)
 
 if __name__ == '__main__':
     main()

@@ -14,6 +14,7 @@ def read_data(filename):
     f_min = header[2:3]
     f_max = header[4:5]
     date_str = header[50:59]
+    end_of_the_day = header[59:64]
     date = datetime.strptime(date_str.replace(' ', ''), '%d/%m/%y')
 
     data = f.read()
@@ -26,7 +27,7 @@ def read_data(filename):
     data_R = data_R.copy().transpose()[:-1, :]
 
     f.close()
-    return data_L, data_R, specs_L, specs_R
+    return data_L, data_R, specs_L, specs_R, end_of_the_day, data
 
 def read_annotations(path, dim=8):
     list_input_raw = open(path, "r")

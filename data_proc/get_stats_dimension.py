@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from data_proc.read_utils import read_annotations
 
-all_data = read_annotations(path='../data/Annotation.txt',
+all_data = read_annotations(path='../Solar_Interface/Image_Filters/Read_Data/Data/Annotation.txt',
                             dim=9)
 
 params = {2: {'window': 2700},
@@ -13,13 +13,14 @@ params = {2: {'window': 2700},
           }
 
 fig, axs = plt.subplots(4, 4, tight_layout=True)
-all_data[all_data[:, 4] == 6, 4] = 4
+all_data[all_data[:, 4] == 6, 4] = 4 #On prend tous les types difficiles (type IV biaisé et on les ramène en types IV)
 all_data = all_data[np.bitwise_or(np.bitwise_and(all_data[:, 4] == 3, all_data[:, 1] - all_data[:, 0] <= 80.0),
                                   all_data[:, 4] != 3)]
+#Perform stats on all types of signal
 for type in range(2, 6):
     indices = all_data[:, 4] == type
     samples = all_data[indices, :]
-    if type == 3: #should be in safe area
+    if type == 3: #should be in safe area we keep only type 3 that are in safe area and exclude those that arent.
         safe_areas = all_data[all_data[:, 4] == 5]
         for sample_idx in np.arange(samples.shape[0]):
             sample = samples[sample_idx, :]

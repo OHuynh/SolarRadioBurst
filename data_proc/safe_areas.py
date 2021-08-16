@@ -56,16 +56,16 @@ class Area:
         perturb_x = perturbations['x']
         perturb_y = perturbations['y']
 
-        offsets_x = (positives[:, 1] - positives[:, 0]) * perturb_x
+        offsets_x = (positives[:, 1] - positives[:, 0]) * perturb_x #information en dur récupérer à partir de get_stats_dimension, on admet qu'on fait +/-% de la width
         offsets_y = (positives[:, 3] - positives[:, 2]) * perturb_y
 
-        offsets = np.array([-offsets_x, offsets_x, -offsets_y, offsets_y]).transpose() + positives[:, :4]
-        inner_offsets = np.array([offsets_x, -offsets_x, offsets_y, -offsets_y]).transpose() + positives[:, :4]
+        offsets = np.array([-offsets_x, offsets_x, -offsets_y, offsets_y]).transpose() + positives[:, :4]#toutes les coordonnées du tableau.
+        inner_offsets = np.array([offsets_x, -offsets_x, offsets_y, -offsets_y]).transpose() + positives[:, :4] # pourquoi doublon ?
         #apply safe area
         offsets = np.expand_dims(offsets, axis=2)
         safe = np.expand_dims(np.repeat(np.array([[self.l_x, self.r_x, self.b_y, self.t_y]]), positives.shape[0], axis=0), axis=2)
 
-        limits = np.concatenate((offsets, safe), axis=2)
+        limits = np.concatenate((offsets, safe), axis=2) #on calcule à partir du point minimal
         limits = np.stack(([np.max(limits[:, 0], axis=1), inner_offsets[:, 0]],
                            [inner_offsets[:, 1], np.min(limits[:, 1], axis=1)],
                            [np.max(limits[:, 2], axis=1), inner_offsets[:, 2]],
@@ -82,15 +82,15 @@ class Area:
         negatives = np.empty(shape=(0, 8))
         height_min = neg_parameters['height_min']
         width_min = neg_parameters['width_min']
-        for i in range(nb):
-            # Skip otherwise ? Safe area too small
-            if self.r_x - self.l_x < neg_parameters['width_min']:
+        for i in range(nb): #nombre de négatifs qu'on veut générer
+            # Skip otherwise ? Safe area too small #87-103 : vérification safe, si c'est trop petit ça dégage
+            if self.r_x - self.l_x < neg_parameters['width_min']: #parameters come from getstats plutôt width moyenne
                 print('Warning : width min adjusted for {}/{}/{} type : {}'.format(self.year,
                                                     self.month,
                                                     self.day,
                                                     self.type))
                 width_min = self.r_x - self.l_x
-                if width_min - neg_parameters['width_random'] < 0:
+                if width_min - neg_parameters['width_random'] < 0: #width random : plus ou moins
                     return negatives
 
             if self.t_y - self.b_y < neg_parameters['height_min']:
@@ -104,15 +104,15 @@ class Area:
                 #height_mean = neg_parameters['height_mean'] - 1
                 #if height_mean - neg_parameters['height_random'] <= 11:
                 #    return negatives
-
+#taille que l'on peut prendre pour accepter les types de signaux (pour rester dans les bornes)
             height_random_range = np.max([np.min([(self.t_y - self.b_y)
-                                                  - height_min, neg_parameters['height_random'] / 2]), 0]) + neg_parameters['height_random'] / 2
+                                                  - height_min, neg_parameters['height_random'] / 2]), 0]) + neg_parameters['height_random'] / 2 # ?
 
             width_random_range = np.max([np.min([(self.r_x - self.l_x)
                                                  - width_min, neg_parameters['width_random'] / 2]), 0]) + neg_parameters['width_random'] / 2
 
-            for _ in range(1000):
-                height = np.random.random() * height_random_range - neg_parameters['height_random'] / 2
+            for _ in range(1000): #1000 tentatives pour trouver un negatif valide, les essais random ne doivent pas tomber sur des positifs
+                height = np.random.random() * height_random_range - neg_parameters['height_random'] / 2 #intervalle sur lequel on peut travailler
                 width = np.random.random() * width_random_range - neg_parameters['width_random'] / 2
                 width = width + width_min
                 height = height + height_min
@@ -121,7 +121,7 @@ class Area:
                 b_y = self.b_y + np.random.random() * (self.t_y - self.b_y - height)
 
                 overlap = False
-                for annot in self.annots:
+                for annot in self.annots:#pour toutes les annots de cette safe area, en ignorant sur le Y, 30% chevauchement, on continue la boucle, si ça ne s'overlap pas, on sait que c'est un négatif, et on enregistre ça dans les négatifs
                     #if iou_area([l_x, b_y, l_x + width, b_y + height], annot[:4]) > 0.5:
                     #check overlap only on x
                     if iou_area([l_x, 10.0, l_x + width, 80.0],
@@ -151,7 +151,7 @@ def get_data_in_areas(all_data, sdate, edate, samples_to_exclude_3 = np.empty(sh
             samples_for_the_day = samples[(samples[:, 5:8] == np_area).all(axis=1), :]
             area = Area(day_date.year, day_date.month, day_date.day, type)
 
-            if type == 4:
+            if type == 4: #[1:8]: start_second, end_second, start_freq, end_freq, label, year, month, day
                 args_to_check_to_exclude = (samples_to_exclude_4[:, 5:8] == np_area).all(axis=1)
                 samples_to_exclude_for_the_day = samples_to_exclude_4[args_to_check_to_exclude, :]
                 if samples_to_exclude_for_the_day.shape[0] > 0:
