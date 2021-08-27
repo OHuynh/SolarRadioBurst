@@ -11,6 +11,9 @@ from data_proc.read_utils import *
 from data_proc.preprocess import remove_artifactsC
 from data_proc.plot import plot_bursts
 from criteria import *
+import time
+from tkinter import Tk, Frame, Menu, Button
+import pysftp
 
 show_detections_cnn = True
 show_detections_whole_day = True
@@ -45,6 +48,30 @@ class Area:
         self.r_x = r_x
         self.t_y = t_y
         self.b_y = b_y
+
+
+def search_current_model():
+    myHostname = "nancep7.obs-nancay.fr"
+    myUsername = "zamar"
+    myPassword = "XSS12WCf+"
+
+    cnopts = pysftp.CnOpts()
+    cnopts.hostkeys = None
+
+    with pysftp.Connection(host=myHostname, username=myUsername, password=myPassword, cnopts=cnopts) as sftp:
+        print("Connection succesfully stablished ... ")
+
+        # Define the file that you want to download from the remote directory
+        remoteFilePath = '/data/zamar/visu.web'
+
+
+        # Define the local path where the file will be saved
+        localFilePath = 'C:/Users/zacch/Desktop/Stage_Orlean/SolarRadioBurst/Solar_Interface/Image_Filters/Read_Data/Data/CurrentDay/visu.web'
+
+        sftp.get(remoteFilePath, localFilePath)
+        print("Document downloaded")
+
+    return localFilePath
 
 
 def nms_bbox_threshold(areas, threshold, iou_threshold):
@@ -115,13 +142,13 @@ def cnn_detect_with_slide(img, area, model, type, params_detect, end_day, freq, 
         right_x = np.min([i + params_detect['window'], np.min([area.r_x, img.shape[1]])]) - i
 
         img_windowed[:, :right_x] = img[:, i:i + right_x]
-
         img_windowed = cv2.resize(img_windowed, dsize=(params_detect['width_px'], params_detect['height_px']))
         img_to_show = np.repeat(np.expand_dims(img_windowed.copy().astype(dtype=np.uint8), axis=2), 3, axis=2)
         img_windowed = np.reshape(img_windowed, (1, params_detect['height_px'], params_detect['width_px'], 1))
         detections = model(img_windowed)
 
-        bboxes = detections['detection_boxes'][0].numpy()  # si c'est supérieur à un certain threshold, c'est détecté
+        bboxes = detections['detection_boxes'][
+            0].numpy()  # si c'est supérieur à un certain threshold, c'est détecté
         bclasses = detections['detection_classes'][0].numpy().astype(np.int32)
         bscores = detections['detection_scores'][0].numpy()
         # print(bscores)
@@ -149,6 +176,7 @@ def cnn_detect_with_slide(img, area, model, type, params_detect, end_day, freq, 
 
         if area.l_x + params_detect['window'] > area.r_x:
             break
+
     if show_whole_area:  # merge sur toute la journée
         boxes_ = boxes.copy()
         boxes_[:, 0] = 11.0
@@ -183,10 +211,10 @@ def cnn_detect_with_slide(img, area, model, type, params_detect, end_day, freq, 
         print("Burst_start : ", str(timedelta(seconds=sortedboxes_[idx, 6])))
         print("Burst duration : ", sortedboxes_[idx, 7])
 
-        mean_for_peak = np.sum([freq[int(sortedboxes_[idx, 6]), :]], axis=0) / len(freq)
-        max_value = np.max(mean_for_peak)
-        peak = np.where(mean_for_peak == max_value) % sortedboxes_[idx, 7]
-        print("Burst peak : ", str(timedelta(seconds=sortedboxes_[idx, 6] + int(peak))))
+        # mean_for_peak = np.sum([freq[int(sortedboxes_[idx, 6]), :]], axis=0) / len(freq)
+        # max_value = np.max(mean_for_peak)
+        # peak = np.where(mean_for_peak == max_value) % sortedboxes_[idx, 7]
+        # print("Burst peak : ", str(timedelta(seconds=sortedboxes_[idx, 6] + int(peak))))
     if burst_count == 0:
         print("No burst found for this type")
     return boxes
@@ -194,18 +222,15 @@ def cnn_detect_with_slide(img, area, model, type, params_detect, end_day, freq, 
 
 def append_detections_CNN():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--path_to_RT1', type=Path)
     parser.add_argument('--path_to_model_2', type=Path)
     parser.add_argument('--path_to_model_3', type=Path)
     parser.add_argument('--path_to_model_4', type=Path)
+    parser.add_argument('--path_to_RT1', type=Path)
+    parser.add_argument('--option', type=int)
     args = parser.parse_args()
-    img, _, _, _, end_of_day, freq = read_data(args.path_to_RT1)
-    end_day = conv_hours_to_sec(end_of_day)
-    filtered_img = remove_artifactsC(img)
     test_area_2 = Area()
     test_area_3 = Area()
     test_area_4 = Area()
-
     print('Loading models...')
     model_type_2 = tf.saved_model.load(str(args.path_to_model_2), tags=None, options=None)
     print('Model type 2 loaded !')
@@ -213,19 +238,80 @@ def append_detections_CNN():
     print('Model type 3 loaded !')
     model_type_4 = tf.saved_model.load(str(args.path_to_model_4), tags=None, options=None)
     print('Model type 4 loaded !')
+    while True:
+        if args.option == 1:
+            img, _, _, _, end_of_day, freq = read_data(args.path_to_RT1)
+            end_day = conv_hours_to_sec(end_of_day)
+            filtered_img = remove_artifactsC(img)
+            cnn_detect_with_slide(filtered_img, test_area_2, model_type_2, 2, params_detect[2], end_day, freq,
+                                   show_detection=show_detections_cnn, show_whole_area=show_detections_whole_day)
+            cnn_detect_with_slide(filtered_img, test_area_3, model_type_3, 3, params_detect[3], end_day, freq,
+                                   show_detection=show_detections_cnn, show_whole_area=show_detections_whole_day)
+            cnn_detect_with_slide(filtered_img, test_area_4, model_type_4, 4, params_detect[4], end_day, freq,
+                                  show_detection=show_detections_cnn, show_whole_area=show_detections_whole_day)
+            break
+        if args.option == 2:
 
-    cnn_detect_with_slide(filtered_img, test_area_2, model_type_2, 2, params_detect[2], end_day, freq,
-                          show_detection=show_detections_cnn, show_whole_area=show_detections_whole_day)
-    cnn_detect_with_slide(filtered_img, test_area_3, model_type_3, 3, params_detect[3], end_day, freq,
-                          show_detection=show_detections_cnn, show_whole_area=show_detections_whole_day)
-    cnn_detect_with_slide(filtered_img, test_area_4, model_type_4, 4, params_detect[4], end_day, freq,
-                          show_detection=show_detections_cnn, show_whole_area=show_detections_whole_day)
+            path = search_current_model()
+            img, _, _, _, end_of_day, freq = read_data(path)
+            end_day = conv_hours_to_sec(end_of_day)
+            filtered_img = remove_artifactsC(img)
+            cnn_detect_with_slide(filtered_img, test_area_2, model_type_2, 2, params_detect[2], end_day, freq,
+                                  show_detection=show_detections_cnn, show_whole_area=show_detections_whole_day)
+            cnn_detect_with_slide(filtered_img, test_area_3, model_type_3, 3, params_detect[3], end_day, freq,
+                                  show_detection=show_detections_cnn, show_whole_area=show_detections_whole_day)
+            cnn_detect_with_slide(filtered_img, test_area_4, model_type_4, 4, params_detect[4], end_day, freq,
+                                  show_detection=show_detections_cnn, show_whole_area=show_detections_whole_day)
+            time.sleep(600)
 
+
+
+
+#
+# class Application(Frame):
+#
+#     def __init__(self):
+#         super().__init__()
+#         self.initUI()
+#
+#     def initUI(self):
+#
+#         self.master.title("CNN Detection API")
+#
+#         menubar = Menu(self.master)
+#         self.master.config(menu=menubar)
+#
+#         fileMenu = Menu(menubar)
+#
+#         submenu = Menu(fileMenu)
+#         submenu.add_command(label="Day")
+#         submenu.add_command(label="Real-time")
+#         submenu.add_command(label="Exit", command=self.onExit)
+#         fileMenu.add_cascade(label='Import', menu=submenu, underline=0)
+#
+#         fileMenu.add_separator()
+#
+#         fileMenu.add_command(label="Exit", underline=0, command=self.onExit)
+#         menubar.add_cascade(label="File", underline=0, menu=fileMenu)
+#         # self.menu.add_command(label="Select a day", command=append_detections_CNN())
+#         # self.menu.add_command(label="Use real-time detection",command=schedule.every(10).minutes.do(append_detections_CNN()))
+#
+#     def onExit(self):
+#
+#         self.quit()
 
 def main():
     append_detections_CNN()
-    # eval_complete_days_with_merging()
+
+
+
 
 
 if __name__ == "__main__":
     main()
+
+    # root = Tk()
+    # root.geometry("640x480")
+    # app = Application()
+    # app.mainloop()
+
