@@ -51,6 +51,62 @@ def rfi_denoise(spec, T=60):
     return spec
 
 
+def gradient_median2(spec, distance=15.0):
+    """
+    median filter along gradient direction
+    Args:
+        spec: rt1
+        distance: distance along the gradient vector on which we take the median
+    Returns: spec filtered
+    """
+    rad90 = np.pi / 2.0
+    gx, gy = np.gradient(spec)
+    GDirInv = np.mod(-np.arctan2(gy, gx), 2 * np.pi)
+    Gdir = np.mod(rad90 + GDirInv, 2 * np.pi)
+    Gmag = np.sqrt(gx** 2 + gy**2)
+
+    AInv=-np.tan(GDirInv);
+    pixels_along_grad = int(distance) * 2
+
+    AInv[np.bitwise_or(GDirInv == rad90, GDirInv == 3 * rad90)] = \
+        -np.tan(GDirInv[np.bitwise_or(GDirInv == rad90, GDirInv == 3 * rad90)])
+    GDirInv[np.bitwise_or(GDirInv == rad90, GDirInv == 3 * rad90)] -= (2 * np.pi / 360.0)
+
+    AInv[Gmag == 0] = -np.tan(GDirInv[Gmag == 0])
+    GDirInv[Gmag == 0] = -(2*np.pi * 89.0 / 360.0)
+
+    # find the segment to discretize along the gradient direction centered on each pixel
+    pt1_ax = distance * np.cos(GDirInv)
+    pt1_ay = distance * np.sin(GDirInv)
+    pt2_ax = distance * np.cos(GDirInv + np.pi)
+    pt2_ay = distance * np.sin(GDirInv + np.pi)
+
+    xi = np.tile(np.arange(pt1_ax.shape[1]), pt1_ax.shape[0]).reshape(pt1_ax.shape[0], pt1_ax.shape[1])
+    yi = np.repeat(np.arange(pt1_ax.shape[0]), pt1_ax.shape[1]).reshape(pt1_ax.shape[0], pt1_ax.shape[1])
+    pt1_ax = xi + pt1_ax
+    pt2_ax = xi + pt2_ax
+    pt1_ay = yi + pt1_ay
+    pt2_ay = yi + pt2_ay
+
+    # very slow
+    # pts_ax = np.round(np.linspace(pt1_ax, pt2_ax, 30))
+    # pts_ay = np.round(np.linspace(pt1_ay, pt2_ay, 30))
+
+    pts_ax = np.minimum(np.maximum(np.linspace(pt1_ax, pt2_ax, pixels_along_grad).astype(dtype=np.int32), 0), pt1_ax.shape[1] - 1)
+    pts_ay = np.minimum(np.maximum(np.linspace(pt1_ay, pt2_ay, pixels_along_grad).astype(dtype=np.int32), 0), pt1_ax.shape[0] - 1)
+
+    # appended value should be different from last one
+    dup_x = np.diff(pts_ax, axis=0, append=(-50)).astype(dtype=np.bool)
+    dup_y = np.diff(pts_ay, axis=0, append=(-50)).astype(dtype=np.bool)
+
+    to_keep = np.bitwise_not(np.bitwise_or(dup_x, dup_y)) # use as mask
+    del dup_x
+    del dup_y
+    medians = spec[pts_ay, pts_ax].reshape(pixels_along_grad, pt1_ax.shape[0], pt1_ax.shape[1])
+    filtered_spec = np.ma.median(np.ma.array(medians, mask=to_keep), axis=0)
+    del to_keep
+    return filtered_spec.data
+
 
 def remove_artifactsC(spec, T = 3600):
     # spec is structured variable among others:
@@ -99,6 +155,5 @@ def remove_artifactsC(spec, T = 3600):
         spec[:, debut: fin+1] = np.random.randn(spec.shape[0], fin - debut + 1) * e + moy
 
     spec = rfi_denoise(spec)
-
-
+    spec = gradient_median2(spec)
     return spec
