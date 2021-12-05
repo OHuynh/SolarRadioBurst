@@ -1,6 +1,10 @@
 import numpy as np
+import skimage
 
-def rfi_denoise(spec, T=60):
+from data_proc.plot import plot_bursts
+rad90 = np.pi / 2.0
+
+def rfi_denoise(spec, T=60, k=1):
     """
     Args:
         spec: signal
@@ -12,7 +16,6 @@ def rfi_denoise(spec, T=60):
     tau = 0.05
     nbf = spec.shape[0]
     nbT = spec.shape[1] / T
-    k = 1
 
     mean_per_f = np.mean(spec, axis=1)
     e0_per_f = np.std(spec, axis=1)
@@ -48,7 +51,7 @@ def rfi_denoise(spec, T=60):
         np.abs(spec[:, :indices.shape[0] * T].reshape([spec.shape[0], -1, T])[not_cond, :]
                - k * BF0_min_mean[not_cond].reshape([-1, 1]))
 
-    return spec
+    return spec, BF0_min_mean
 
 
 def gradient_median2(spec, distance=15.0):
@@ -59,7 +62,7 @@ def gradient_median2(spec, distance=15.0):
         distance: distance along the gradient vector on which we take the median
     Returns: spec filtered
     """
-    rad90 = np.pi / 2.0
+
     gx, gy = np.gradient(spec)
     GDirInv = np.mod(-np.arctan2(gy, gx), 2 * np.pi)
     Gdir = np.mod(rad90 + GDirInv, 2 * np.pi)
@@ -108,6 +111,53 @@ def gradient_median2(spec, distance=15.0):
     return filtered_spec.data
 
 
+def gradient_main(spec):
+    gx, gy = np.gradient(spec)
+    GDirInv = np.mod(-np.arctan2(gy, gx), 2 * np.pi)
+    Gdir = np.mod(rad90 + GDirInv, 2 * np.pi)
+    Gmag = np.sqrt(gx** 2 + gy**2).astype(dtype=np.float32)
+    width = 60
+    img_height = spec.shape[0]
+    img_width = spec.shape[1]
+
+    Gmag_padded = np.pad(Gmag, pad_width=((0,0), (0, width * 2)))
+    Gdir_padded = np.pad(Gdir, pad_width=((0,0), (0, width * 2)))
+    Gmag_mean = np.zeros_like(Gmag)
+    Gdir_mean = np.zeros_like(Gdir)
+    for i in range(0, 2*width):
+         Gmag_mean += Gmag_padded[:,i:img_width + i]
+         Gdir_mean += Gdir_padded[:,i:img_width + i] * Gmag_padded[:,i:img_width + i]
+    epsilon = 1e-7
+    Gdir_mean /= (Gmag_mean + epsilon)
+    alpha = 10.0
+    Gmag_mean *= np.exp(-alpha * np.square((np.abs(np.abs(Gdir_mean) - rad90) / rad90)))
+
+    dangle = 25.0 * np.pi / 180.0
+    indices_90 = np.bitwise_or(np.bitwise_and(Gdir_mean > -(rad90 + dangle), Gdir_mean < (rad90 - dangle)),
+                              np.bitwise_and(Gdir_mean > (rad90 - dangle), Gdir_mean < (rad90 + dangle)))
+    sgmag = 150;
+    indices_low_mag = Gmag_mean < sgmag
+    Gdir_mean_n = Gdir_mean.copy()
+    Gmag_mean_n = Gmag_mean.copy()
+    Gdir_mean_n[indices_low_mag] = 0
+    Gmag_mean_n[indices_low_mag] = 0
+    Gdir_mean_n[indices_90] = Gdir_mean[indices_90]
+    Gmag_mean_n[indices_90] = Gmag_mean[indices_90]
+
+    flagp = np.zeros(Gdir_mean_n.shape, dtype=bool)
+    flagp[Gdir_mean_n > 0] = True
+    flagp = np.roll(flagp, 1, axis=0)
+    flagp[-1, :] = False
+
+    flagn = np.zeros(Gdir_mean_n.shape, dtype=bool)
+    flagn[Gdir_mean_n < 0] = True
+    flagn = np.roll(flagp, -1, axis=0)
+    flagn[0, :] = False
+
+    flag = np.bitwise_or(flagn, flagp)
+    return flag
+
+
 def remove_artifactsC(spec, T = 3600):
     # spec is structured variable among others:
     # spec.data : power data, linear
@@ -154,6 +204,19 @@ def remove_artifactsC(spec, T = 3600):
         moy = (mf - md) / (cal_d + 2 * guard) * (np.reshape(ii, [1, -1]) - debut) + md
         spec[:, debut: fin+1] = np.random.randn(spec.shape[0], fin - debut + 1) * e + moy
 
-    spec = rfi_denoise(spec)
+    k = 1
+    #import time
+    #import matplotlib.pyplot as plt
+    #plot_bursts(spec, [])
+    #start_time = time.time()
+    spec, BF0_min_mean = rfi_denoise(spec, k=1)
+    #plot_bursts(spec, [])
     spec = gradient_median2(spec)
+    spec = spec + k * np.mean(BF0_min_mean)
+    #plot_bursts(spec, [])
+    flag = gradient_main(spec)
+    #plot_bursts(flag, [])
+    spec = skimage.filters.rank.median(spec.astype(np.uint8), footprint=np.ones([1, 15]), mask=np.bitwise_not(flag))
+    #plot_bursts(spec, [])
+    #print(f"{time.time() - start_time} ms")
     return spec
