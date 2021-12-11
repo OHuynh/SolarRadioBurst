@@ -1,5 +1,9 @@
 import numpy as np
 import skimage
+import ctypes
+
+
+libFastMedianRFI = ctypes.CDLL("../data_proc/fastMedianRFI.so")
 
 from data_proc.plot import plot_bursts
 rad90 = np.pi / 2.0
@@ -216,7 +220,15 @@ def remove_artifactsC(spec, T = 3600):
     #plot_bursts(spec, [])
     flag = gradient_main(spec)
     #plot_bursts(flag, [])
-    spec = skimage.filters.rank.median(spec.astype(np.uint8), footprint=np.ones([1, 15]), mask=np.bitwise_not(flag))
+    filtered_spec = np.zeros_like(spec)
+    libFastMedianRFI.fastmedianRFI(ctypes.c_void_p(spec.ctypes.data),
+                                   ctypes.c_int(spec.shape[0]),
+                                   ctypes.c_int(spec.shape[1]),
+                                   ctypes.c_int(15), #size_filter
+                                   ctypes.c_void_p(flag.ctypes.data),
+                                   ctypes.c_void_p(filtered_spec.ctypes.data)
+                                   )
+    #spec = skimage.filters.rank.median(spec.astype(np.uint8), footprint=np.ones([1, 15]), mask=np.bitwise_not(flag))
     #plot_bursts(spec, [])
     #print(f"{time.time() - start_time} ms")
-    return spec
+    return filtered_spec
