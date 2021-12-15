@@ -221,13 +221,16 @@ def remove_artifactsC(spec, T = 3600):
     flag = gradient_main(spec)
     #plot_bursts(flag, [])
     filtered_spec = np.zeros_like(spec)
-    libFastMedianRFI.fastmedianRFI(ctypes.c_void_p(spec.ctypes.data),
+    spec_t = np.ravel(spec.T)
+    flag_t = np.ravel(flag.T)
+    libFastMedianRFI.fastmedianRFI(ctypes.c_void_p(spec_t.ctypes.data),
                                    ctypes.c_int(spec.shape[0]),
                                    ctypes.c_int(spec.shape[1]),
                                    ctypes.c_int(15), #size_filter
-                                   ctypes.c_void_p(flag.ctypes.data),
+                                   ctypes.c_void_p(flag_t.ctypes.data),
                                    ctypes.c_void_p(filtered_spec.ctypes.data)
                                    )
+    filtered_spec = filtered_spec.reshape(-1, spec.shape[0]).T
     #spec = skimage.filters.rank.median(spec.astype(np.uint8), footprint=np.ones([1, 15]), mask=np.bitwise_not(flag))
     #plot_bursts(spec, [])
     #print(f"{time.time() - start_time} ms")
