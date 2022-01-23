@@ -2,7 +2,7 @@ import numpy as np
 
 from datetime import datetime
 
-def read_data(filename):
+def read_data(filename, rt1_before_2010=False):
     file_head = 405;
     spec_head_size = 5;
     spec_size = 400;
@@ -10,13 +10,15 @@ def read_data(filename):
     f = open(filename, "rb")
     header = f.read(file_head)
 
-    header = header.decode('utf-8')
-    f_min = header[2:3]
-    f_max = header[4:5]
-    date_str = header[50:59]
-    end_of_the_day = header[59:64]
-    date = datetime.strptime(date_str.replace(' ', ''), '%d/%m/%y')
-
+    if rt1_before_2010:
+        header = header.decode('utf-8')
+        f_min = header[2:3]
+        f_max = header[4:5]
+        date_str = header[50:59]
+        end_of_the_day = header[59:64]
+        date = datetime.strptime(date_str.replace(' ', ''), '%d/%m/%y')
+    else:
+        end_of_the_day = None
     data = f.read()
     data = np.frombuffer(data, dtype=np.uint8).reshape(int(len(data) / (spec_head_size + spec_size)), -1)
     specs, _, data = np.split(data, np.array([4,4]), axis=1)
@@ -27,7 +29,7 @@ def read_data(filename):
     data_R = data_R.copy().transpose()[:-1, :]
 
     f.close()
-    return data_L, data_R, specs_L, specs_R, end_of_the_day, data
+    return data_L, data_R, specs_L, specs_R, end_of_the_day
 
 def read_annotations(path, dim=8):
     list_input_raw = open(path, "r")
