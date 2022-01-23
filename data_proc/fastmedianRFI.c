@@ -172,7 +172,7 @@ int yprime(
 }
 
 
-int fastmedianRFI(const double *spec, size_t sizeRow, size_t sizeCol, size_t widthFilter, const char *flag, double *out) {
+int fastmedianRFI(const double *spec, size_t sizeRow, size_t sizeCol, size_t sizeWidthFilter, const char *flag, double *out) {
     double *y; 
     size_t m,n; 
     int kk,noyau,Min,Max,Val,ct;
@@ -185,7 +185,7 @@ int fastmedianRFI(const double *spec, size_t sizeRow, size_t sizeCol, size_t wid
     nbf=sizeRow;
 	
 	ct=0;
-	
+	int widthFilter = (int) sizeWidthFilter;
     for (i=0;i<nbt;i++){
         for (k=0;k<widthFilter;k++){
             noyau=i*nbf+k;
@@ -199,25 +199,26 @@ int fastmedianRFI(const double *spec, size_t sizeRow, size_t sizeCol, size_t wid
     }
     kk=2*widthFilter;
     aa=malloc (kk * sizeof(double));
-        
     for (i=0;i<nbt;i++){
         for (k=0;k<nbf;k++){
             noyau=i*nbf+k;
             
             if (flag[noyau]==1){
-            Min=i*nbf+MAX((k-widthFilter), 0);
-            Max=i*nbf+MIN((k+widthFilter), nbf);
-            kk=Max-Min;
-            Val=0;
+				Min=i*nbf+MAX((k-widthFilter), 0);
+				Max=i*nbf+MIN((k+widthFilter), nbf - 1);
             
-            for (l=Min;l<Max;l++){
-                    if (flag[l]!=1){
-                aa[Val]=spec[l];
-                Val++;
+				for (l=0;l<2*widthFilter;l++){
+					aa[l] = 0;
+				}
+			
+				Val=0;
+				for (l=Min;l<Max;l++){
+					if (flag[l] != 1){
+						aa[Val] = spec[l];
+						Val++;
                     }
                 }
-           
-				/* Do the actual computations in a subroutine */
+				kk=Max-Min;
 				yprime(out,aa,kk,noyau);
             }
             else{
@@ -226,7 +227,7 @@ int fastmedianRFI(const double *spec, size_t sizeRow, size_t sizeCol, size_t wid
 
         } 
     }
-        printf("\n ct=%d",ct);
+    printf("\n ct=%d",ct);
     free(aa);
     return 1;
 }
