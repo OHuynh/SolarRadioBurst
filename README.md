@@ -22,3 +22,15 @@ This folder contains the evaluation scripts.
 
 This folder contains the scripts for training the CNN models on GCloud.  Change in this script the path to Tensorflow object-detection library.
 
+### examples of detection
+
+groundtruth is in green, detection in red
+
+#### type II
+![Type II](doc/type2_ex.png)
+
+#### type III
+![Type III](doc/type3_ex.png)
+
+#### type IV
+![Type IV](doc/type4_ex.png)
